@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emergency Vehicle Route & Traffic Congestion Prediction</title>
+  
+  <!-- Leaflet GIS CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  
+  <!-- Custom UI Stylesheet -->
+  <link rel="stylesheet" href="style.css?v=2" />
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="brand">
+      <div class="brand-icon">🚨</div>
+      <div>
+        <div class="brand-title">EMERGENCY ROUTE & TRAFFIC CONGESTION PREDICTOR</div>
+        <div class="brand-subtitle">YOLOv8 Object Detection &bull; Spatio-Temporal CNN-LSTM &bull; Cloud Dispatch</div>
+      </div>
+    </div>
+    
+    <div class="system-status">
+      <div class="status-badge">
+        <span class="dot-green"></span>
+        <span>YOLO Detector: <strong>Active</strong></span>
+      </div>
+      <div class="status-badge">
+        <span class="dot-green"></span>
+        <span>CNN-LSTM Forecaster: <strong>Online</strong></span>
+      </div>
+      <div class="status-badge">
+        <span id="system-time">--:--:--</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Work Area -->
+  <main class="main-container">
+    <!-- Left Sidebar: Emergency Dispatch Controls -->
+    <aside class="control-panel">
+      <!-- Vehicle Selector Card -->
+      <div class="card">
+        <div class="card-title">
+          <i class="fa-solid fa-truck-medical"></i> Select Emergency Unit
+        </div>
+        <div class="vehicle-selector">
+          <button class="vehicle-btn active" data-type="ambulance" onclick="selectVehicle('ambulance')">
+            <span class="v-icon">🚑</span>
+            <span class="v-label">Ambulance</span>
+          </button>
+          <button class="vehicle-btn" data-type="fire_truck" onclick="selectVehicle('fire_truck')">
+            <span class="v-icon">🚒</span>
+            <span class="v-label">Fire Engine</span>
+          </button>
+          <button class="vehicle-btn" data-type="police" onclick="selectVehicle('police')">
+            <span class="v-icon">🚓</span>
+            <span class="v-label">Police Interceptor</span>
+          </button>
+        </div>
+        <div id="vehicle-desc" style="font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.4;">
+          Rapid patient transport; priority traffic signal preemption enabled.
+        </div>
+      </div>
+
+      <!-- Route Parameters Card -->
+      <div class="card">
+        <div class="card-title">
+          <i class="fa-solid fa-map-location-dot"></i> Emergency Mission Routing
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dispatch Origin Location:</label>
+          <select id="origin-select" class="form-select" onchange="onLocationChanged()">
+            <option value="DISPATCH_HQ">Central Emergency Dispatch HQ</option>
+            <option value="STATION_1" selected>Station Alpha (North Fire & EMS)</option>
+            <option value="STATION_2">Station Bravo (East EMS Depot)</option>
+            <option value="INCIDENT_SITE">Active Emergency Incident Site</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Emergency Destination:</label>
+          <select id="destination-select" class="form-select" onchange="onLocationChanged()">
+            <option value="HOSPITAL_CITY" selected>City General Level-1 Trauma Center</option>
+            <option value="HOSPITAL_MERCY">Mercy Regional Medical Center</option>
+            <option value="INCIDENT_SITE">Active Emergency Incident Site</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-primary" onclick="computeRoute()">
+            <i class="fa-solid fa-route"></i> Compute Optimal Route
+          </button>
+          <button class="btn-primary btn-dispatch" onclick="dispatchVehicle()">
+            <i class="fa-solid fa-play"></i> Dispatch
+          </button>
+        </div>
+      </div>
+
+      <!-- Performance & Savings HUD -->
+      <div class="card" id="metrics-card">
+        <div class="card-title">
+          <i class="fa-solid fa-chart-line"></i> Dynamic Routing Analytics
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-item">
+            <div class="metric-value" id="val-time-saved">-32.4%</div>
+            <div class="metric-label">Travel Time Saved</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-value highlight" id="val-eta">3.8 min</div>
+            <div class="metric-label">Predicted ETA</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-value" id="val-static-eta" style="color: var(--accent-rose)">5.6 min</div>
+            <div class="metric-label">Standard GPS ETA</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-value highlight" id="val-bottleneck">Downtown Avoided</div>
+            <div class="metric-label">Gridlock Avoidance</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate Routes Card -->
+      <div class="card">
+        <div class="card-title">
+          <i class="fa-solid fa-layer-group"></i> Evaluated Candidate Paths
+        </div>
+        <div class="routes-list" id="candidate-routes-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center/Right: Interactive Map -->
+    <div class="map-view">
+      <div id="map"></div>
+
+      <!-- Top-Right Floating Live CCTV Feed -->
+      <div class="floating-panel panel-cctv">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="fa-solid fa-video"></i> Live YOLO CCTV Feed
+          </div>
+          <select id="camera-select" class="form-select" style="width: 140px; padding: 2px 6px; font-size: 11px;" onchange="onCameraChange()">
+            <option value="cam_1">CAM-01: I-94 Hub</option>
+            <option value="cam_3">CAM-03: Downtown</option>
+            <option value="cam_5">CAM-05: River Bridge</option>
+            <option value="cam_6">CAM-06: Hospital Ramp</option>
+          </select>
+        </div>
+        <div class="cctv-screen">
+          <img id="cctv-image" class="cctv-img" src="/api/camera/frame" alt="Traffic Video Stream" />
+          <div style="position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 4px; font-size: 10px; color: #10b981;">
+            ● YOLOv8 VEHICLE INFERENCE
+          </div>
+        </div>
+        <div class="cctv-stats">
+          <div class="cctv-stat-box">
+            <div class="cctv-stat-val" id="stat-cars">14</div>
+            <div class="metric-label">Cars</div>
+          </div>
+          <div class="cctv-stat-box">
+            <div class="cctv-stat-val" id="stat-trucks">3</div>
+            <div class="metric-label">Trucks</div>
+          </div>
+          <div class="cctv-stat-box">
+            <div class="cctv-stat-val" id="stat-buses">2</div>
+            <div class="metric-label">Buses</div>
+          </div>
+          <div class="cctv-stat-box">
+            <div class="cctv-stat-val" id="stat-density" style="color: var(--accent-amber)">68%</div>
+            <div class="metric-label">Density</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom-Right Floating Spatio-Temporal Congestion Forecast Chart -->
+      <div class="floating-panel panel-forecast">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="fa-solid fa-chart-area"></i> CNN-LSTM Congestion Forecast (Next 15 min)
+          </div>
+          <span style="font-size: 11px; color: var(--accent-cyan);" id="forecast-segment-name">Corridor: Seg_1</span>
+        </div>
+        <div style="height: 140px; position: relative;">
+          <canvas id="forecastChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Map Legend -->
+      <div class="legend-card">
+        <div style="font-weight: 600; color: white;">Corridor Congestion Index</div>
+        <div class="legend-items">
+          <div class="legend-item"><span class="legend-color" style="background: #10b981;"></span> Free Flow (&lt;35%)</div>
+          <div class="legend-item"><span class="legend-color" style="background: #f59e0b;"></span> Moderate (35-65%)</div>
+          <div class="legend-item"><span class="legend-color" style="background: #ef4444;"></span> Heavy (65-85%)</div>
+          <div class="legend-item"><span class="legend-color" style="background: #7f1d1d;"></span> Gridlock (&gt;85%)</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- External JS Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Application Logic -->
+  <script src="app.js?v=2"></script>
+</body>
+</html>

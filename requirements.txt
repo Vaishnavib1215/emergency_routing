@@ -1,0 +1,20 @@
+# Emergency Vehicle Route & Traffic Congestion Prediction System
+# Core Deep Learning & Computer Vision
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+opencv-python-headless>=4.7.0
+numpy>=1.23.0
+pandas>=2.0.0
+scikit-learn>=1.2.0
+
+# Backend & Networking
+fastapi>=0.100.0
+uvicorn>=0.20.0
+pydantic>=2.0.0
+requests>=2.28.0
+networkx>=3.0
+
+# Visualization & Utilities
+matplotlib>=3.7.0
+tqdm>=4.65.0
